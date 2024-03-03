@@ -1,0 +1,149 @@
+---
+title: "NYPD Gun Violence"
+author: "Benji Edwards"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+#### This report is a brief analysis on the NYPC Shooting Incident Data over time, and demonstrates the data science process:
+
+#### 1. Import
+
+#### 2. Tidy
+
+#### 3. Transform, Visualize & Model
+
+#### 4. Communicate
+
+# 1. Import
+
+Let's start by importing our libraries and data
+
+```{r Libraries}
+library(tidyverse)
+```
+
+Load the NYPD Shooting Incident Data (Historic), which comes from the NYPD website (also posted on data.gov), and is a list of every shooting incident that occurred in NYC since 2006.
+
+```{r NYPD Data}
+nypd_csv <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+nypd_df <- read_csv(nypd_csv)
+```
+
+# 2. Tidy
+
+Now that we have the data, let's inspect nypd_df and clean up the dataframe.
+
+```{r Inspect}
+# Total number of rows in our data:
+nrow(nypd_df)
+
+# Preview of our data:
+head(nypd_df)
+
+# Column names that we're working with:
+colnames(nypd_df)
+```
+
+I see some nulls across some columns, let's see how many null values exist in our data
+
+```{r Null Analysis}
+# Let's represent the number of nulls in our data as a percentage:
+not_null <- sum(!is.na(nypd_df))
+not_null
+is_null <- sum(is.na(nypd_df))
+is_null
+pct_null <- (is_null/not_null)*100
+pct_null
+```
+
+About **20%** of our data has null values. Let's drop nulls and only include columns we're interested in. From our brief inspection, **a question that comes to mind is the number of incidents that occur in each borough over time.**
+
+```{r Cleaned NYPD Data}
+# Select only the columns we're interested in:
+clean_nypd_df <- select(nypd_df, OCCUR_DATE, OCCUR_TIME, BORO, STATISTICAL_MURDER_FLAG, PERP_RACE, PERP_SEX)
+
+# Drop any null dates, as we want to look at trends over time:
+clean_nypd_df <- clean_nypd_df %>%
+  filter(!is.na(OCCUR_DATE) & !is.na(BORO))
+
+# Reinspect data to see how the shape has changed:
+nrow(clean_nypd_df)  
+head(clean_nypd_df)
+
+# Inspect the types of data we're working with:
+str(clean_nypd_df)
+```
+
+The 'OCCUR_DATE' column is in character format. Let's convert this to a date.
+
+```{r Date Clean}
+# Convert our string data to a date:
+clean_nypd_df <- clean_nypd_df %>%
+  mutate(OCCUR_DATE = as.Date(OCCUR_DATE, format = "%m/%d/%Y"))
+# Datatype after cleaning:
+typeof(clean_nypd_df$OCCUR_DATE)
+```
+
+# 3. Transform, Visualize & Model
+
+Let's see how many incidents happen overall in each borough:
+
+```{r Borough Incidents}
+# Group by borough and count the number of rows will give us the number of shooting per borough
+total_boro_incidents <- nypd_df %>%
+  group_by(BORO) %>%
+  summarize(count = n())
+print(total_boro_incidents)
+```
+
+```{r Borough Viz}
+ggplot(total_boro_incidents, aes(x = BORO, y = count)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Number of Incidents by Borough",
+       x = "Borough",
+       y = "Total Number of Incidents")
+```
+
+I want to observe incidents for each borough over time. I wonder what the date range is.
+
+```{r Date Range}
+# Find our min and max dates, and then find the difference between them:
+min_date <- min(clean_nypd_df$OCCUR_DATE)
+max_date <- max(clean_nypd_df$OCCUR_DATE)
+date_diff <- difftime(max_date, min_date, units = "days")
+date_diff
+```
+
+There are **6208 days** worth of data, so plotting these by days will be overwhelming. I think **looking at these trends over years would be more insightful** So let's create a year column:
+
+```{r Create Year}
+# Create a year column, represented as a date using floor_date() from the lubridate package:
+clean_nypd_df$OCCUR_YEAR <- floor_date(clean_nypd_df$OCCUR_DATE, unit = "year")
+```
+
+Now that we have years, let's prep our dataframe for a visualization in ggplot
+
+```{r viz}
+nypd_year <- clean_nypd_df %>%
+  group_by(BORO, OCCUR_YEAR) %>%
+  summarise(NUM_INCIDENTS = n())
+
+# Plot the data using ggplot
+ggplot(nypd_year, aes(x = OCCUR_YEAR, y = NUM_INCIDENTS, color = BORO)) +
+  geom_line() +
+  labs(title = "Number of Incidents per Year Grouped by Boroughs", x = "Year", y = "Number of Incidents")
+
+```
+
+# Communicate
+
+In this analysis of NYPD Shooting Incidents, we observe that Brooklyn and the Bronx have the highest number of shootings (10,9333 and 7,937 respectively) since 2006. More research should be conducted on various demographic, economic and environmental factors that may lead to gun violence in these areas.
+
+As we look at trends over time, we can see that incidents were declining overall until sometime between 2015 and 2020. At that time, the number of incidents and suddenly spiked across all boroughs. Then the number of shooting incidents declines again after 2020, when lock downs occurred, which may explain the decline in shootings. However, research should be conducted between 2015 and 2020 to explain the rising shooting incidents.
+
+Possible bias that may have been introduced into this data set may come from areas that are more heavily policed. Accordingly, other boroughs that do not have as large of a law-enforcement presence may be under-reporting incidents. In other words, more police officers in an area means more availability to respond to and report shooting incidents.
+
+```{r Session}
+sessionInfo()
+```
